@@ -9,7 +9,9 @@ contract('Game', function(accounts){
   let playerOne = accounts[1]; 
   let playerTwo = accounts[2];
   let strategy = 'ATTACK';
+  let strategyTwo = 'DEFEND';
   let toAttack = playerTwo; 
+  let toAttackTwo = 0; 
   let randFrontEndNum = 7; 
 
   /* Steps to take before each test run, deploy contract each time to start
@@ -40,8 +42,24 @@ contract('Game', function(accounts){
       let gameId = eventOne.args._gameId;
       let gameEndBlock = eventOne.args._endGameBlock; 
       //Need to get playerOne out of this struct...
-      let player = await game.gameInfo(gameId);
+      let theStruct = await game.gameInfo(gameId);
+      let grabplayer = theStruct[0];
+      let grabstrat = theStruct[1];
+      console.log(theStruct);
       assert.equal(gameEndBlock.toNumber(), resultThree+40, "Incorrect saved block end.");
+      assert.strictEqual(grabplayer, playerOne, "Incorrect player 1 saved.");
+      assert.strictEqual(grabstrat, theStrategyHash, "Incorrect strategy hash.");
+    })
+    it('Should allow a player to join an exisiting game', async function() {
+      let result = await game.claimTokens({from: playerOne, gas:400000});
+      let theStrategyHash = await web3.sha3(strategy,toAttack,randFrontEndNum, {encoding:'hex'});
+      let resultTwo = await game.startAGame(theStrategyHash, {from:playerOne, value:100});
+      let eventOne = resultTwo.logs[0];
+      let gameId = eventOne.args._gameId;
+      let resultThree = await game.claimTokens({from:playerTwo, gas:400000});
+      let theStrategyHashTwo = await web3.sha3(strategyTwo, toAttackTwo, randFrontEndNum, {encoding: 'hex'});
+      //Found some interesting behavior with initialized arrays in Truffle...need to sort
+      //let resultFour = await game.joinAGame(gameId, theStrategyHashTwo, {from:playerTwo, value:100});
     })
   })
 }); 

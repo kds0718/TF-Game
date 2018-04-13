@@ -60,7 +60,7 @@ contract Game is ERC721Token, Ownable {
         bytes32[] opposingPlayersStrategies;
         string[] opStraegyRevealed; 
         address[] opAddressesRevealed;
-        uint256 endBlockNum;  
+        uint endBlockNum;  
     }
     //Mapping gameid to the game info
     mapping(bytes32 => GameInfo) public gameInfo; 
@@ -154,7 +154,7 @@ contract Game is ERC721Token, Ownable {
     function joinAGame(bytes32 _strategy, bytes32 _gameId) public payable onlyPlaying(msg.sender) returns(bool){
         require(msg.value == 100);
         //Check that game exists and is ongoing
-        require(block.number <= gameInfo[_gameId].endBlockNum);
+        require(block.number >= gameInfo[_gameId].endBlockNum);
         totalAmt = totalAmt.add(msg.value);
         //Need to ensure that player 2 does not try multiple strategies for the same game
         for(uint256 i = 0; i < gameInfo[_gameId].opposingPlayers.length; i++) {
