@@ -17,7 +17,6 @@
  *  it as fair as possible).
  *  
  */
-
 pragma solidity ^0.4.18;
 
 import "../node_modules/zeppelin-solidity/contracts/math/SafeMath.sol";
@@ -49,28 +48,50 @@ contract Game is ERC721Token, Ownable {
     //Incremental token indexer
     uint256 public tokenIndexer = 1;
     //Nonce for game creation hash
-    uint256 public nonce;  
+    uint256 public nonce = 1;  
     //Struct for information about each game
     struct GameInfo {
-        address playerOne; 
-        bytes32 playerOneStrategy; 
-        string  p1StrategyRevealed;
-        address p1AddressesRevealed;
-        address[] opposingPlayers; 
-        bytes32[] opposingPlayersStrategies;
-        string[] opStraegyRevealed; 
-        address[] opAddressesRevealed;
-        uint endBlockNum;  
+        bytes32[] strategies;
+        uint endBlockNum;
+        address[] players; 
+        bool[]  strategiesRevealed;
+        address[] addressesRevealed;
     }
     //Mapping gameid to the game info
     mapping(bytes32 => GameInfo) public gameInfo; 
 
 //============================================================================
+// CONSTANTS/VIEW/PURE
+//============================================================================    
+    //Getters for arrays in struct
+    function getPlayersLength(bytes32 _gameId) public view returns(uint _length) {
+        return gameInfo[_gameId].players.length;
+    }
+    function getPlayersByIndex(bytes32 _gameId, uint _index) public view returns(address){
+        return gameInfo[_gameId].players[_index];
+    }
+    function getStrategiesLength(bytes32 _gameId) public view returns(uint _length) {
+        return gameInfo[_gameId].strategies.length;
+    }
+    function getStrategiesByIndex(bytes32 _gameId, uint _index) public view returns(bytes32){
+        return gameInfo[_gameId].strategies[_index];
+    }
+    function getStrategiesRevealed(bytes32 _gameId) public view returns(bool[]) {
+        return gameInfo[_gameId].strategiesRevealed;
+    }
+    function getAddressesRevealed(bytes32 _gameId) public view returns(address[]) {
+        return gameInfo[_gameId].addressesRevealed;
+    }
+
+//============================================================================
 // EVENTS
 //============================================================================
+    
     event AttackTokenClaimed(address _claimer, uint256 _attackTokenIndex); 
     event DefenceTokenClaimed(address _claimer, uint256 _defenceTokenIndex);
-    event GameStarted(bytes32 _gameId, uint256 _endGameBlock);
+    event GameStarted(bytes32 _gameId, uint256 _endGameBlock, address _initiator);
+    event GameJoined(bytes32 _gameId, address _challenger);
+
 //============================================================================
 // MODIFIERS
 //============================================================================
@@ -137,13 +158,26 @@ contract Game is ERC721Token, Ownable {
         //Assuming at this point, it's just a fee to play - this is not 'winnable'
         totalAmt = totalAmt.add(msg.value);
         nonce = nonce.add(1);
-        gameInfo[gameId].playerOne = msg.sender;
-        //Assume stategy is a hash of 'attack' or 'defend' plus address of attacked or 0
-        gameInfo[gameId].playerOneStrategy = _strategy;
         //Game time end - end block number
-        gameInfo[gameId].endBlockNum = block.number.add(40);
-        GameStarted(gameId, block.number.add(40));
+        
+        require(addPlayer(msg.sender, gameId) > 0);
+        require(addStrategy(_strategy, gameId) > 0);  
+        gameInfo[gameId].endBlockNum = block.number.add(40);    
+        GameStarted(gameId, block.number.add(40), msg.sender);
         return gameId; 
+    }
+/*
+  * @dev Function to append to an address array to gameInfo[_gameId].players
+  * @param _theaddress the address to add
+  * @param __thegameId the game id to mapp to
+  * @return length of new array
+*/
+    function addPlayer(address _theaddress, bytes32 _thegameId) internal returns(uint _length){
+        return gameInfo[_thegameId].players.push(_theaddress);
+    }
+
+    function addStrategy(bytes32 _strategy, bytes32 _thegameId) internal returns(uint _length){
+        return gameInfo[_thegameId].strategies.push(_strategy);
     }
 /*
   * @dev Function for any player to challenge a game, assuming more than one play can challenge a game
@@ -154,17 +188,21 @@ contract Game is ERC721Token, Ownable {
     function joinAGame(bytes32 _strategy, bytes32 _gameId) public payable onlyPlaying(msg.sender) returns(bool){
         require(msg.value == 100);
         //Check that game exists and is ongoing
-        require(block.number >= gameInfo[_gameId].endBlockNum);
+        require(block.number <= gameInfo[_gameId].endBlockNum);
         totalAmt = totalAmt.add(msg.value);
-        //Need to ensure that player 2 does not try multiple strategies for the same game
-        for(uint256 i = 0; i < gameInfo[_gameId].opposingPlayers.length; i++) {
-            require(gameInfo[_gameId].opposingPlayers[i] != msg.sender);
+        //Need to ensure that player 2 does not try multiple strategies for the same game and player 1 does not try to play 
+        // against themselves
+        for(uint256 i = 0; i < gameInfo[_gameId].players.length; i++) {
+            require(gameInfo[_gameId].players[i] != msg.sender);
         }
-        gameInfo[_gameId].opposingPlayers.push(msg.sender);
-        //Need to check what if player wants to do a 0 strategy? does that push to an index?
-        gameInfo[_gameId].opposingPlayersStrategies.push(_strategy);
+        //PUSH only works in storage, not memory - reworking
+        require(addPlayer(msg.sender, _gameId) > 1);
+        require(addStrategy(_strategy, _gameId) > 1);
+        GameJoined(_gameId, msg.sender);
         return true; 
     }
+
+
 
 /*
   * @dev Function for each player to reveal their strategy at the end of the game, player 1 or else
